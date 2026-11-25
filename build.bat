@@ -7,4 +7,4 @@ call "%VS%\VC\Auxiliary\Build\vcvarsall.bat" x86 >nul 2>nul
 cd /d "%~dp0"
 if not exist build mkdir build
 rc /nologo /fo build\version.res src\version.rc || exit /b 1
-cl /nologo /std:c++17 /O2 /MT /W3 /EHa /LD src\*.cpp build\version.res /Fobuild\ /Febuild\dinput8.dll /link /DEF:src\dinput8.def /SUBSYSTEM:WINDOWS user32.lib
+cl /nologo /std:c++17 /O2 /MT /W3 /EHa /LD src\*.cpp build\version.res /Fobuild\ /Febuild\dinput8.dll /link /DEF:src\dinput8.def /SUBSYSTEM:WINDOWS user32.lib gdi32.lib

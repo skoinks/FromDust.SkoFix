@@ -164,6 +164,7 @@ static __declspec(naked) void PanProjectStub() {
         jmp g_panRet
     }
 }
+bool g_rotateInPlace;
 void MouseDustLoaded() {
     if (!IniInt("Mouse", "EdgePushBack", 0) && IniInt("Mouse", "ScreenSpaceCursor", 1)) {
         // Keyboard panning keeps the cursor in 7..93% of the width, 7..90% of the height and within
@@ -180,6 +181,9 @@ void MouseDustLoaded() {
         CallAt("pan position", Dust(0x1011db67), "ff d2 8b 46 04 8b 48 0c 8b 11 8b 42 10 83 c4 0c", (void*)PanProjectStub, 5);
         CallAt("pan flag", Dust(0x1011e5d1), "8b 0d ?? ?? ?? ?? 8b 59 44 8b cb e8", (void*)PanStub, 6);
     }
+    // While the camera rotates its centre glides to the cursor. Take the branch of frames that do not.
+    g_rotateInPlace = !IniInt("Mouse", "RecenterWhileRotating", 0) &&
+        Patch("rotation recentering", Dust(0x1011e7b3), "0f 84 c0 00 00 00 f3 0f 10 7e 28", "90 e9 c0 00 00 00");
     // Always take the branch for frames that pan neither the camera nor the cursor.
     if (!IniInt("Mouse", "EdgePan", 1)) Patch("edge pan off", Dust(0x1011ddbf), "0f 85 ec 07 00 00 f3 0f 10 5c 24 60", "90 e9 ec 07 00 00");
     if (!m.enabled) return;

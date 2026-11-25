@@ -188,6 +188,7 @@ static VOID CALLBACK OnDll(ULONG reason, const LdrData* d, PVOID) {
         QualityDustLoaded();
         EditorDustLoaded();
         SandboxDustLoaded();
+        FreeplayDustLoaded();
     } else if (g_dust) {
         g_dust = 0;
         Log("[dust] gameplay DLL unloaded");
@@ -203,8 +204,9 @@ static BOOL WINAPI hPeek(LPMSG m, HWND w, UINT a, UINT b, UINT r) {
         bool fg = Foreground();
         CutscenesFrame(fg);
         MouseFrame();
-        EditorFrame(fg && !SandboxActive());
+        EditorFrame(fg && !SandboxActive() && !FreeplayActive());
         SandboxFrame(fg);
+        FreeplayFrame(fg);
     }
     return got;
 }
@@ -329,6 +331,7 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID) {
     PointerInit();
     EditorInit();
     SandboxInit();
+    FreeplayInit();
     FrameInit();
     RatesInit();
     QualityInit();

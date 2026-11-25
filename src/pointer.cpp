@@ -1,4 +1,4 @@
-// Ordinary mouse pointer, drawn on the back buffer before Present. Drawn by the presenting thread,
+// Ordinary mouse pointer and panel, drawn on the back buffer before Present. Drawn by the presenting thread,
 // positioned by the gameplay thread.
 #include "common.h"
 #include <d3d9.h>
@@ -63,11 +63,11 @@ static IDirect3DTexture9* Texture(IDirect3DDevice9* d) {
     return g_tex;
 }
 
-static void Draw(IDirect3DDevice9* d) {
+static void Draw(IDirect3DDevice9* d, bool pointer, bool panel) {
     IDirect3DSurface9 *bb = nullptr, *rt = nullptr, *ds = nullptr;
     IDirect3DStateBlock9* sb = nullptr;
-    auto tex = Texture(d);
-    if (!tex || FAILED(d->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &bb))) return;
+    auto tex = pointer ? Texture(d) : nullptr;
+    if ((!tex && !panel) || FAILED(d->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &bb))) return;
     D3DSURFACE_DESC desc;
     bb->GetDesc(&desc);
     if (SUCCEEDED(d->CreateStateBlock(D3DSBT_ALL, &sb))) {
@@ -80,7 +80,6 @@ static void Draw(IDirect3DDevice9* d) {
         d->SetVertexShader(nullptr);
         d->SetPixelShader(nullptr);
         d->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX1);
-        d->SetTexture(0, tex);
         d->SetStreamSourceFreq(0, 1);                // in case instancing was left on
         d->SetStreamSourceFreq(1, 1);
         static const DWORD rs[][2] = {
@@ -103,12 +102,16 @@ static void Draw(IDirect3DDevice9* d) {
         d->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
         d->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
         d->SetSamplerState(0, D3DSAMP_SRGBTEXTURE, 0);
-        float s = g_size * desc.Height / 1080.0f, k = s / TEX;
-        float x = floorf(g_x * desc.Width - 5 * k) - 0.5f, y = floorf(g_y * desc.Height - 4 * k) - 0.5f;   // hot spot: the tip
-        struct Vtx { float x, y, z, w; DWORD c; float u, v; } q[4] = {
-            { x, y, 0, 1, 0xFFFFFFFF, 0, 0 }, { x + s, y, 0, 1, 0xFFFFFFFF, 1, 0 },
-            { x, y + s, 0, 1, 0xFFFFFFFF, 0, 1 }, { x + s, y + s, 0, 1, 0xFFFFFFFF, 1, 1 } };
-        d->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, q, sizeof(Vtx));
+        if (panel) PanelDraw(d, desc.Width, desc.Height);
+        if (tex) {
+            d->SetTexture(0, tex);
+            float s = g_size * desc.Height / 1080.0f, k = s / TEX;
+            float x = floorf(g_x * desc.Width - 5 * k) - 0.5f, y = floorf(g_y * desc.Height - 4 * k) - 0.5f;   // hot spot: the tip
+            struct Vtx { float x, y, z, w; DWORD c; float u, v; } q[4] = {
+                { x, y, 0, 1, 0xFFFFFFFF, 0, 0 }, { x + s, y, 0, 1, 0xFFFFFFFF, 1, 0 },
+                { x, y + s, 0, 1, 0xFFFFFFFF, 0, 1 }, { x + s, y + s, 0, 1, 0xFFFFFFFF, 1, 1 } };
+            d->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, q, sizeof(Vtx));
+        }
         if (began) d->EndScene();
         if (rt) { d->SetRenderTarget(0, rt); rt->Release(); }
         d->SetDepthStencilSurface(ds);
@@ -124,13 +127,15 @@ static PreT oPre;
 static void __fastcall hPre(uintptr_t gfx, void* edx) {
     oPre(gfx, edx);
     auto dev = At<IDirect3DDevice9*>(gfx + 0x2710);
-    if (g_broken || g_off || !dev || !g_any || (int)(GetTickCount() - g_tick) > 100) return;   // signed, g_tick may be newer
+    bool pointer = !g_off && g_any && (int)(GetTickCount() - g_tick) <= 100;     // signed, g_tick may be newer
+    bool panel = PanelVisible();
+    if (g_broken || !dev || (!pointer && !panel)) return;
     __try {
         // The engine's device lock, shared with its loading threads.
         auto cs = (CRITICAL_SECTION*)0x92b500;
         if (!TryEnterCriticalSection(cs)) return;
         __try {
-            if (dev->TestCooperativeLevel() == D3D_OK) Draw(dev);
+            if (dev->TestCooperativeLevel() == D3D_OK) Draw(dev, pointer, panel);
         } __finally {
             LeaveCriticalSection(cs);
         }
@@ -141,12 +146,13 @@ static void __fastcall hPre(uintptr_t gfx, void* edx) {
 }
 
 void PointerInit() {
-    if (!IniInt("Mouse", "NormalCursor", 1)) return;
+    bool pointer = IniInt("Mouse", "NormalCursor", 1) != 0;
+    if (!pointer && !IniInt("Sandbox", "Sandbox", 1)) return;
     g_size = IniInt("Mouse", "NormalCursorSize", 40);
     if (!BytesMatch(0x53b190, "83 ec 10 53 56 8b f1 e8 b4 f7 00 00 bb 01 00 00 00")) { Log("[pointer] code differs, skipped"); return; }
     oPre = (PreT)0x54a950;
     int32_t rel = (int32_t)((uintptr_t)hPre - (0x53b197 + 5));
     WriteMem(0x53b198, &rel, 4);
-    g_installed = true;
-    Log("[pointer] normal cursor ok");
+    g_installed = pointer;
+    Log("[pointer] %s ok", pointer ? "normal cursor" : "panel");
 }

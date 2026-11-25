@@ -71,6 +71,7 @@ extern const char* volatile g_doing;
 void RatesDustLoaded();
 void RatesPreFrame();
 void FrameDustLoaded();
+extern bool g_rotateInPlace;                                      // the camera does not turn around the cursor
 extern volatile int g_panned;
 void __cdecl PanPointer(float* out);
 void EditorInit();
@@ -80,3 +81,14 @@ void SandboxInit();
 void SandboxFrame(bool foreground);
 void SandboxDustLoaded();
 bool SandboxActive();
+enum { PANEL_TEXT, PANEL_HEAD, PANEL_ON, PANEL_DIM };
+struct PanelLine { int style; char key[12], text[52]; };          // zeroed before filling
+void PanelInit();
+void PanelShow(const PanelLine* lines, int n);                    // visible for half a second
+void PanelHide();
+bool PanelVisible();
+void PanelDraw(struct IDirect3DDevice9* d, int width, int height);
+void FreeplayInit();
+void FreeplayFrame(bool foreground);
+void FreeplayDustLoaded();
+bool FreeplayActive();

@@ -71,7 +71,11 @@ static void Run(int id, const char* name) {
         float pos[3] = { p[0], p[1], p[2] };
         unsigned &limit = At<unsigned>(spm + 0x568 + id * 4), count = At<unsigned>(spm + 0x5b4 + id * 4);
         Log("[editor] %s (id %d) at %.1f %.1f %.1f, count %u limit %u", name, id, pos[0], pos[1], pos[2], count, limit);
-        if (g_limits && limit < 64) limit = 64;
+        if (g_limits) {                         // terraforming shares counter 1, water sources 8
+            const int shared[] = { id, 1, 8 };
+            for (int i : shared) if (At<unsigned>(spm + 0x568 + i * 4) < 64) At<unsigned>(spm + 0x568 + i * 4) = 64;
+            At<unsigned>(spm + 0x5b4 + 4) = 0;
+        }
         ((void(__thiscall*)(uintptr_t, int, float*))Dust(0x1012b640))(spm, id, pos);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         g_bad = true;                           // the map lacks the data

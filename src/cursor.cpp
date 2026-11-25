@@ -119,10 +119,10 @@ static void Aim(uintptr_t im, uintptr_t ctl, uintptr_t cur, bool input) {
         moved = true;
     }
     Used();
-    // The camera turns around the target, which must not move then. Afterwards, once the camera has
+    // If the camera turns around the target, that must not move then. Afterwards, once the camera has
     // come to rest or the mouse moves, aim from the pointer again.
     static bool turned;
-    if (Turning(ctl)) { turned = true; return; }
+    if (!g_rotateInPlace && Turning(ctl)) { turned = true; return; }
     if (turned) {
         if (mx == 0 && my == 0 && moved) return;
         turned = false;

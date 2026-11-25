@@ -20,7 +20,7 @@ A fix for modern systems.
 - Raw mouse input without acceleration, smoothing or minimum step
 - Screen-space cursor movement
 - Optional standard mouse pointer
-- Unrestricted camera rotation
+- Unrestricted camera rotation, without recentering on the cursor
 - Removed object snapping and terrain slowdown for mouse
 - Configurable edge panning and edge push-back
 - Adjustable cursor and camera speed
@@ -41,11 +41,33 @@ A fix for modern systems.
 - Job queue race condition fix
 
 **Extras**
+- Sandbox mode
 - Developer world editor (F2)
 - World powers on the numeric keypad (experimental)
 - Unlockable story maps and challenges
 
 All features can be configured in `FromDust.SkoFix.ini`.
+
+## Sandbox
+
+<a href="docs/sandbox.webp"><img src="docs/sandbox.webp" alt="Sandbox mode" width="100%"></a>
+
+The 13 story maps without goals, villagers or totems, with all powers and natural events. Story progress and challenges are not affected.
+
+Press F3 in the main menu and select a map in Challenges. Press F3 again to restore the challenges.
+
+| Key | Action |
+|---|---|
+| 1 2 3 4 | Sand, lava, water, plants |
+| Shift, X (tap or hold) | Actions of the selected matter: mountains, calderas, volcanoes, sources, trees, tsunami |
+| 5 6 7 8 | Jellify water, evaporate water, slow fire, bigger sphere |
+| 9 0 - = | Infinite earth, black hole, caldera, inverse caldera |
+| Number pad 1 2 3 4 | Rain, volcano, caldera, crack |
+| Number pad 5 6 7 | Water source, lava source, tsunami |
+| Number pad 0 | Stop all events |
+| F4 | Hide or show the panel |
+
+Can be disabled with `Sandbox=0`.
 
 ## Installation
 
