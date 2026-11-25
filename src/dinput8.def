@@ -1,0 +1,5 @@
+LIBRARY dinput8
+EXPORTS
+    DirectInput8Create = P_DirectInput8Create @1
+    DllCanUnloadNow = P_DllCanUnloadNow PRIVATE
+    DllGetClassObject = P_DllGetClassObject PRIVATE

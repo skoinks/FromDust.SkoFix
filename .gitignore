@@ -1,0 +1,26 @@
+# build output
+build/
+dist/
+*.obj
+*.dll
+
+# everything recorded while playing, and personal saves
+*.dmp
+*.log
+*.csv
+*.bin
+save-backup/
+
+# derived from the game's own files
+*.pkl
+*.cso
+tools/wv.txt
+
+# local
+archive/
+tools/fd.py
+tools/callgraph.py
+tools/prof.py
+
+
+__pycache__/
