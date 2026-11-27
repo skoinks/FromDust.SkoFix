@@ -1,5 +1,5 @@
-// Sandbox. The challenge menu lists the story maps instead, and starts them like challenges, so that
-// story progress and saves are not involved. Rules, villagers and their
+// Sandbox. The challenge menu lists the story maps and then the challenges, and starts the story maps
+// like challenges, so that story progress is not involved; challenge results are not kept. Rules, villagers and their
 // landmarks are off, all powers and natural events on.
 #include "common.h"
 #include <math.h>
@@ -39,7 +39,7 @@ enum { POWERS = sizeof kPowers / sizeof *kPowers };
 static const struct { int power; const char* key[4]; const char* text[4]; } kUses[] = {   // of the active power
     { 14, { "Shift", "hold Shift", "X", "hold X" }, { "small mountain", "big mountain", "small caldera", "big caldera" } },
     { 15, { "Shift", "hold Shift", "X", "hold X" }, { "lava source", "volcano", "remove volcano or source", "crater" } },
-    { 16, { "hold Shift", "X", "hold X" }, { "remove water source", "water source", "tsunami" } },
+    { 16, { "Shift", "X", "hold X" }, { "water source", "remove water source", "tsunami" } },
     { 17, { "hold Shift", "X", "hold X" }, { "remove tree", "tree", "add plants" } },
 };
 static int g_power = -1;             // key pressed
@@ -446,26 +446,32 @@ static void __fastcall hSequence(uintptr_t self, void* edx, float dt) {
 
 // ---- maps ----------------------------------------------------------------------------------------
 // [game+50] story +1c, count +20, challenges +2c, count +30, both 28 bytes each (file name, name
-// in the menu, text). Progress of challenges: [[game+2c0]+14], 20 bytes each, 0 = locked.
-static uint8_t g_progress[64 * 20];
-struct Maps {                        // story maps in place of the challenges
+// in the menu, text). Progress of challenges: [[game+2c0]+14], 20 bytes each, 0 = locked. A
+// challenge started from the menu is [game+2c0]+24 in that table, a story map started as one too.
+enum { MAPS = 64 };
+static uint8_t g_progress[MAPS * 20], g_maps[MAPS * 28];
+struct Maps {                        // story maps and challenges in place of the challenges
     uintptr_t list = 0, profile = 0, maps = 0, progress = 0;
-    unsigned count = 0;
+    unsigned count = 0, stories = 0;
     Maps() {
         auto g = Game();
         auto l = At<uintptr_t>(g + 0x50), p = At<uintptr_t>(g + 0x2c0);
         if (!l || !p) return;
-        auto stories = At<unsigned>(l + 0x20);
-        if (!At<uintptr_t>(l + 0x1c) || !stories || stories > 64 || stories > At<unsigned>(l + 0x30)) return;
+        unsigned s = At<unsigned>(l + 0x20), c = At<unsigned>(l + 0x30);
+        if (!At<uintptr_t>(l + 0x1c) || !At<uintptr_t>(l + 0x2c) || !s || s > c || s >= MAPS) return;
         list = l;
         profile = p;
+        stories = s;
         maps = At<uintptr_t>(l + 0x2c);
-        count = At<unsigned>(l + 0x30);
+        count = c;
         progress = At<uintptr_t>(p + 0x14);
+        if (c > MAPS - s) c = MAPS - s;
+        memcpy(g_maps, At<void*>(l + 0x1c), s * 28);
+        memcpy(g_maps + s * 28, reinterpret_cast<void*>(maps), c * 28);
         memset(g_progress, 0, sizeof g_progress);
-        for (int i = 0; i < 64; i++) g_progress[i * 20] = 1;
-        At<uintptr_t>(l + 0x2c) = At<uintptr_t>(l + 0x1c);
-        At<unsigned>(l + 0x30) = stories;
+        for (int i = 0; i < MAPS; i++) g_progress[i * 20] = 1;
+        At<uintptr_t>(l + 0x2c) = (uintptr_t)g_maps;
+        At<unsigned>(l + 0x30) = s + c;
         At<uintptr_t>(p + 0x14) = (uintptr_t)g_progress;
     }
     ~Maps() {
@@ -492,15 +498,43 @@ static void __cdecl hStart(int index, int story, int resume) {
     Restore();
     RestorePeople();
     if (!g_active) { oStart(index, story, resume); return; }
-    Maps m;
-    if (m.list) {
-        g_playing = g_ready = false;
-        g_runs = 0;
-        g_power = g_pending = g_event = -1;
-        auto name = At<const char*>(At<uintptr_t>(m.list + 0x2c) + index * 28);
-        Log("[freeplay] starting map %d: %s", index + 1, name ? name : "");
-    } else g_active = false;
-    oStart(index, story, resume);
+    g_playing = g_ready = false;
+    g_runs = 0;
+    g_power = g_pending = g_event = -1;
+    unsigned stories;
+    {
+        Maps m;
+        stories = m.stories;
+        if (!m.list) g_active = false;
+        else if (index >= 0 && (unsigned)index < At<unsigned>(m.list + 0x30)) {
+            auto name = At<const char*>(At<uintptr_t>(m.list + 0x2c) + index * 28);
+            Log("[freeplay] starting %s %d: %s", (unsigned)index < stories ? "story map" : "challenge",
+                (unsigned)index < stories ? index + 1 : index - stories + 1, name ? name : "");
+        }
+        if (g_active && (unsigned)index < stories) { oStart(index, story, resume); return; }
+    }
+    oStart(g_active ? index - stories : index, story, resume);   // a challenge as it is
+}
+
+// The result of a challenge: marks it done, keeps the best time and the totals. In the sandbox it
+// writes to a copy of the table.
+typedef void(__fastcall* ResultT)(uintptr_t, void*);
+static ResultT oResult;
+static void __fastcall hResult(uintptr_t self, void* edx) {
+    auto p = g_active && Game() ? At<uintptr_t>(Game() + 0x2c0) : 0;
+    auto l = p ? At<uintptr_t>(Game() + 0x50) : 0;
+    unsigned n = l ? At<unsigned>(l + 0x30) : 0;
+    if (!p || !n || n > MAPS) { oResult(self, edx); return; }
+    static uint8_t copy[MAPS * 20];
+    uint8_t totals[12];
+    auto real = At<uintptr_t>(p + 0x14);
+    memcpy(copy, reinterpret_cast<void*>(real), n * 20);
+    memcpy(totals, reinterpret_cast<void*>(p + 0x28), sizeof totals);
+    At<uintptr_t>(p + 0x14) = (uintptr_t)copy;
+    oResult(self, edx);
+    At<uintptr_t>(p + 0x14) = real;
+    memcpy(reinterpret_cast<void*>(p + 0x28), totals, sizeof totals);
+    Log("[freeplay] challenge result not kept");
 }
 
 // Events on a map unlock challenges.
@@ -558,7 +592,7 @@ void FreeplayFrame(bool fg) {
         PanelLine l = {};
         l.style = g_list ? PANEL_ON : PANEL_TEXT;
         strcpy(l.key, "F3");
-        strcpy(l.text, g_list ? "Sandbox: on, choose a map in Challenges" : "Sandbox: off");
+        strcpy(l.text, g_list ? "Sandbox: on, every map is in Challenges" : "Sandbox: off");
         PanelShow(&l, 1);
     }
 }
@@ -590,6 +624,7 @@ void FreeplayDustLoaded() {
     oList = (ListT)Hook("challenge list", Dust(0x1001d3d0), "81 ec d0 00 00 00 56 8b f1 83 7e 2c 00", 6, (void*)hList);
     oSwitch = (SwitchT)Hook("power switch", Dust(0x100149e0), "83 ec 48 53 8b 5c 24 50 56 57 8b f9", 8, (void*)hSwitch);
     Hook("power requests", Dust(0x10014ae0), "8b 41 18 56 57 83 cf ff 33 d2 8d 77 ff 3b c2 74", 5, (void*)hForget);
-    if (!oSwitch || !oUnlock || !oSetSlot || !oSequence || !oLast || !oList) return;
+    oResult = (ResultT)Hook("challenge result", Dust(0x10016a30), "55 8b ec 83 e4 f8 a1 ?? ?? ?? ?? 83 ec 7c", 6, (void*)hResult);
+    if (!oSwitch || !oUnlock || !oSetSlot || !oSequence || !oLast || !oList || !oResult) return;
     oStart = (StartT)Hook("map start", Dust(0x1001a580), "81 ec 0c 01 00 00 83 bc 24 14 01 00 00 00 56 57 0f 84 5b 01 00 00", 6, (void*)hStart);
 }

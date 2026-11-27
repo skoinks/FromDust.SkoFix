@@ -128,11 +128,11 @@ static bool ArchivesReady() {
     }
     return false;
 }
-// Archive lookup: an archive without a table does not contain the file.
+// Archive lookup: a slot not filled yet, or an archive without a table, does not contain the file.
 typedef uintptr_t(__fastcall* FindT)(uintptr_t, void*, uint32_t);
 static FindT oFind;
 static uintptr_t __fastcall hFind(uintptr_t archive, void* edx, uint32_t key) {
-    if (!At<uintptr_t>(archive + 4)) return 0;
+    if (!archive || !At<uintptr_t>(archive + 4)) return 0;
     return oFind(archive, edx, key);
 }
 typedef int(__fastcall* DoneT)(uintptr_t, void*);

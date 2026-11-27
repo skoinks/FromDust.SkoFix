@@ -23,7 +23,10 @@ A fix for modern systems.
 - Unrestricted camera rotation, without recentering on the cursor
 - Removed object snapping and terrain slowdown for mouse
 - Configurable edge panning and edge push-back
+- No camera drift when the pointer is outside the playing field
 - Adjustable cursor and camera speed
+- Faster camera movement while holding Ctrl
+- Farther zoom out
 
 **Graphics**
 - Maximum model detail at all distances (terrain, vegetation, objects, villagers)
@@ -52,7 +55,7 @@ All features can be configured in `FromDust.SkoFix.ini`.
 
 <a href="docs/sandbox.webp"><img src="docs/sandbox.webp" alt="Sandbox mode" width="100%"></a>
 
-The 13 story maps without goals, villagers or totems, with all powers and natural events. Story progress and challenges are not affected.
+Every story map and challenge map without goals, villagers or totems, with all powers and natural events. Story progress and challenge results are not affected.
 
 Press F3 in the main menu and select a map in Challenges. Press F3 again to restore the challenges.
 

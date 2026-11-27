@@ -47,7 +47,14 @@ void MousePreFrame() {
     At<int>(w + 0x14) += z;
     g_fresh = true;
 }
+// ---- camera pan speed ----------------------------------------------------------------
+// The pan code scales the camera and target movement by a constant (50). Its two loads read
+// g_panScale instead, which is larger while the key is held.
+static int g_fastKey;
+static float g_fast = 2.0f, g_panBase;
+static float g_panScale;
 void MouseFrame() {
+    if (g_panBase) g_panScale = g_fastKey && Foreground() && (GetAsyncKeyState(g_fastKey) & 0x8000) ? g_panBase * g_fast : g_panBase;
     auto w = m.enabled && oPoll ? Wrapper() : 0;
     if (w && GetTickCount() - g_polled > 200) At<int>(w + 0xC) = At<int>(w + 0x10) = At<int>(w + 0x14) = 0;
 }
@@ -127,6 +134,23 @@ static void __fastcall hCam(uintptr_t im, void* edx) {
     At<float>(im + 0x134) *= 0.327f * m.camera;       // applied twice; matches yaw
 }
 
+// ---- zoom ------------------------------------------------------------------------------
+// The wheel sets a zoom of 0..1 that blends the camera distance from the near view to the far one.
+// The camera modes copy their settings from the camera manager; the far distance of mode 1 is at
+// +c4 of the copy, the near one at +3c.
+static float g_zoomOut = 1.5f;
+typedef void(__fastcall* SettingsT)(uintptr_t, void*, int, uintptr_t);
+static SettingsT oSettings;
+static void __fastcall hSettings(uintptr_t cm, void* edx, int mode, uintptr_t out) {
+    oSettings(cm, edx, mode, out);
+    if (mode != 1 || !out) return;
+    static bool logged;
+    float& dist = At<float>(out + 0xc4);
+    if (!logged) Log("[mouse] zoom from %.1f to %.1f, now %.1f", At<float>(out + 0x3c), dist, dist * g_zoomOut);
+    logged = true;
+    dist *= g_zoomOut;
+}
+
 void MouseInit() {
     m.enabled = IniInt("Mouse", "DirectResponse", 1);
     m.rawCamera = IniInt("Mouse", "DirectCamera", 1);
@@ -136,6 +160,10 @@ void MouseInit() {
     m.lag = IniInt("Mouse", "BreathLag", 1);
     m.cursor = IniFloat("Mouse", "CursorSpeed", 1.0f);
     m.camera = IniFloat("Mouse", "CameraSpeed", 1.0f);
+    int key = 0;
+    if (IniKeys("Mouse", "FastPanKey", "Ctrl", &key, 1)) g_fastKey = key;
+    g_fast = IniFloat("Mouse", "FastPanSpeed", 2.0f);
+    g_zoomOut = IniFloat("Mouse", "ZoomOut", 1.5f);
     if (m.enabled) oOwner = (OwnerT)Hook("mouse device", 0x809b80, "55 56 8b f1 33 ed 39 6e 20", 6, (void*)hOwner);
     if (oOwner) oPoll = (PollT)Hook("mouse poll", 0x8048d0, "53 56 8b f1 32 db 83 7e 08 00", 6, (void*)hPoll);
 }
@@ -184,6 +212,25 @@ void MouseDustLoaded() {
     // While the camera rotates its centre glides to the cursor. Take the branch of frames that do not.
     g_rotateInPlace = !IniInt("Mouse", "RecenterWhileRotating", 0) &&
         Patch("rotation recentering", Dust(0x1011e7b3), "0f 84 c0 00 00 00 f3 0f 10 7e 28", "90 e9 c0 00 00 00");
+    // Frames that pan neither the camera nor the cursor test the cursor against the playable area
+    // and glide the camera to it when it is outside. Skip the test.
+    if (!IniInt("Mouse", "FollowPointerOffField", 0))
+        Patch("off-field follow", Dust(0x1011e879), "83 7c 24 1c 00 0f 84 a4 fd ff ff", "83 7c 24 1c 00 90 e9 a4 fd ff ff");
+    if (g_fastKey && g_fast > 0 && g_fast != 1) {
+        static const uintptr_t loads[] = { 0x1011e639, 0x1011e6be };
+        uintptr_t k = Dust(0x1015a968);
+        bool ok = BytesMatch(Dust(0x1011e639), "f3 0f 10 3d ?? ?? ?? ?? f3 0f 58 dd") &&
+                  BytesMatch(Dust(0x1011e6be), "f3 0f 10 2d ?? ?? ?? ?? f3 0f 59 c5");
+        for (auto va : loads) ok = ok && At<uintptr_t>(Dust(va) + 4) == k;
+        if (ok) {
+            g_panBase = g_panScale = At<float>(k);
+            uintptr_t p = (uintptr_t)&g_panScale;
+            for (auto va : loads) WriteMem(Dust(va) + 4, &p, 4);
+        }
+        Log("[mouse] fast pan %s", ok ? "ok" : "differs, skipped");
+    }
+    if (g_zoomOut > 0 && g_zoomOut != 1)
+        oSettings = (SettingsT)Hook("camera settings", Dust(0x10119740), "8b 44 24 04 48 83 f8 03 77 38 ff 24 85", 8, (void*)hSettings);
     // Always take the branch for frames that pan neither the camera nor the cursor.
     if (!IniInt("Mouse", "EdgePan", 1)) Patch("edge pan off", Dust(0x1011ddbf), "0f 85 ec 07 00 00 f3 0f 10 5c 24 60", "90 e9 ec 07 00 00");
     if (!m.enabled) return;
